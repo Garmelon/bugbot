@@ -1,2 +1,3 @@
-logs.db
-logsreadable/*
+*.db
+logs_readable/
+*/__pycache__/
