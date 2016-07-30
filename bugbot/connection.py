@@ -1,5 +1,6 @@
 import json
 import time
+import logging
 import threading
 import websocket
 from websocket import WebSocketException as WSException
@@ -46,12 +47,16 @@ class Connection():
 					ROOM_FORMAT.format(self.room),
 					enable_multithread=True
 				)
+				logging.debug("Connected")
 				return True
+			
 			except WSException:
 				if tries > 0:
 					tries -= 1
 				if tries != 0:
 					time.sleep(delay)
+		
+		logging.debug("Failed to connect")
 		return False
 	
 	def disconnect(self):
@@ -65,13 +70,18 @@ class Connection():
 		if self.ws:
 			self.ws.close()
 			self.ws = None
+		
+		logging.debug("Disconnected")
 	
-	def launch(self):
+	def launch(self, func=None):
 		"""
-		launch() -> Thread
+		launch(function) -> Thread
 		
 		Connect to the room and spawn a new thread running run.
+		This also calls the function func in the new thread.
 		"""
+		
+		self.func = func
 		
 		if self.connect(tries=1):
 			self.thread = threading.Thread(target=self.run, name=self.room)
@@ -86,6 +96,9 @@ class Connection():
 		
 		Receive messages.
 		"""
+		
+		if self.func:
+			self.func()
 		
 		while not self.stopping:
 			try:
@@ -104,6 +117,8 @@ class Connection():
 		
 		self.stopping = True
 		self.disconnect()
+		
+		logging.debug("Stopped")
 	
 	def join(self):
 		"""
@@ -231,5 +246,6 @@ class Connection():
 			"data": kwargs or None,
 			"id": str(self.send_id)
 		}
+		
 		self.send_id += 1
 		self.send_json(packet)

@@ -1,3 +1,4 @@
+import logging
 import sqlite3
 
 class Log():
@@ -9,9 +10,29 @@ class Log():
 		"""
 		name - name of the db
 		room - name of the room
+		
+		This also opens a connection to the db - make sure to close that later!
 		"""
 		self.name = name
 		self.room = room
+	
+	def open(self):
+		"""
+		open() -> None
+		
+		Open the connection to the db.
+		"""
+		
+		self.con = sqlite3.connect(self.name)
+	
+	def close(self):
+		"""
+		close() -> None
+		
+		Close the connection to the db.
+		"""
+		self.con.commit()
+		self.con.close()
 	
 	def get_newest(self):
 		"""
@@ -21,14 +42,13 @@ class Log():
 		Returns None if no message was found.
 		"""
 		
-		with sqlite3.connect(self.name) as db:
-			message = db.execute(
-				"SELECT id FROM messages WHERE room=? ORDER BY id DESC LIMIT 1",
-				(self.room,)
-			)
+		message = self.con.execute(
+			"SELECT id FROM messages WHERE room=? ORDER BY id DESC LIMIT 1",
+			(self.room,)
+		)
 		
 		result = message.fetchone()
-		return result[0] if result
+		return result[0] if result else None
 	
 	def get_top_level(self):
 		"""
@@ -37,14 +57,13 @@ class Log():
 		Returns a full list of top-level messages' ids.
 		"""
 		
-		with sqlite3.connect(self.name) as db:
-			message = db.execute(
-				"SELECT id FROM messages WHERE parent ISNULL AND room=?",
-				(self.room,)
-			)
+		message = self.con.execute(
+			"SELECT id FROM messages WHERE parent ISNULL AND room=?",
+			(self.room,)
+		)
 		
 		result = message.fetchall()
-		return [entry[0] for entry in result] if result
+		return [entry[0] for entry in result] if result else None
 	
 	def get_message(self, mid):
 		"""
@@ -53,11 +72,10 @@ class Log():
 		Returns message with that id.
 		"""
 		
-		with sqlite3.connect(self.name) as db:
-			message = db.execute(
-				"SELECT * FROM messages WHERE id=? AND room=?",
-				(mid, self.room)
-			)
+		message = self.con.execute(
+			"SELECT * FROM messages WHERE id=? AND room=?",
+			(mid, self.room)
+		)
 		
 		result = message.fetchone()
 		return {
@@ -77,14 +95,13 @@ class Log():
 		Returns the message's parent's id.
 		"""
 		
-		with sqlite3.connect(self.name) as db:
-			message = db.execute(
-				"SELECT parent FROM messages WHERE id=? AND room=?",
-				(mid, self.room)
-			)
+		message = self.con.execute(
+			"SELECT parent FROM messages WHERE id=? AND room=?",
+			(mid, self.room)
+		)
 		
 		result = message.fetchone()
-		return result[0] if result
+		return result[0] if result else None
 	
 	def get_children(self, mid):
 		"""
@@ -93,14 +110,13 @@ class Log():
 		Returns a list of the message's childrens' ids.
 		"""
 		
-		with sqlite3.connect(self.name) as db:
-			message = db.execute(
-				"SELECT id FROM messages WHERE parent=? AND room=?",
-				(mid, self.room)
-			)
+		message = self.con.execute(
+			"SELECT id FROM messages WHERE parent=? AND room=?",
+			(mid, self.room)
+		)
 		
 		result = message.fetchall()
-		return [entry[0] for entry in result] if result
+		return [entry[0] for entry in result] if result else None
 	
 	def add_message(self, msg):
 		"""
@@ -109,28 +125,36 @@ class Log():
 		Add a message to the db.
 		"""
 		
-		with sqlite3.connect(self.name) as db:
-			# insert or update message
-			db.execute(
-				"INSERT OR REPLACE INTO messages VALUES(?,?,?,?,?,?,?)",
-				(
-					msg["id"],
-					self.room,
-					msg["time"],
-					msg["sender"]["session_id"],
-					msg["sender"]["name"],
-					msg["content"],
-					msg["parent"] if "parent" in msg else None
-				)
+		# insert or update message
+		self.con.execute(
+			"INSERT OR REPLACE INTO messages VALUES(?,?,?,?,?,?,?)",
+			(
+				msg["id"],
+				self.room,
+				msg["time"],
+				msg["sender"]["session_id"],
+				msg["sender"]["name"],
+				msg["content"],
+				msg["parent"] if "parent" in msg else None
 			)
-			
-			# insert or update session
-			db.execute(
-				"INSERT OR REPLACE INTO sessions VALUES(?,?,?,?)",
-				(
-					msg["sender"]["session_id"],
-					msg["sender"]["id"],
-					1 if "is_staff" in msg["sender"] and msg["sender"]["is_staff"] else None,
-					1 if "is_manager" in msg["sender"] and msg["sender"]["is_manager"] else None
-				)
+		)
+		
+		# insert or update session
+		self.con.execute(
+			"INSERT OR REPLACE INTO sessions VALUES(?,?,?,?)",
+			(
+				msg["sender"]["session_id"],
+				msg["sender"]["id"],
+				1 if "is_staff" in msg["sender"] and msg["sender"]["is_staff"] else None,
+				1 if "is_manager" in msg["sender"] and msg["sender"]["is_manager"] else None
 			)
+		)
+	
+	def commit(self):
+		"""
+		commit() -> None
+		
+		Write all the changes to the db.
+		"""
+		
+		self.con.commit()
